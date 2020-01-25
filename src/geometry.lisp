@@ -40,3 +40,38 @@
   x
   y
   z)
+
+(defun vec3-difference (u v)
+  (vec3 (- (vec3-x u) (vec3-x v))
+        (- (vec3-y u) (vec3-y v))
+        (- (vec3-z u) (vec3-z v))))
+
+(defun dot-product (u v)
+  (+ (* (vec3-x u) (vec3-x v))
+     (* (vec3-y u) (vec3-y v))
+     (* (vec3-z u) (vec3-z v))))
+
+(defun cross-product (u v)
+  (flet ((det (a b c d)
+           (- (* a d) (* b c))))
+    (vec3  (det (vec3-y u) (vec3-z u)
+                (vec3-y v) (vec3-z v))
+        (- (det (vec3-x u) (vec3-z u)
+                (vec3-x v) (vec3-z v)))
+           (det (vec3-x u) (vec3-y u)
+                (vec3-x v) (vec3-y v)))))
+
+(defun sum-of-squares (u)
+  (let ((x (vec3-x u))
+        (y (vec3-y u))
+        (z (vec3-z u)))
+    (+ (* x x) (* y y) (* z z))))
+
+(defun norm (u)
+  (sqrt (sum-of-squares u)))
+
+(defun normalize (u)
+  (let ((c (norm u)))
+    (vec3 (/ (vec3-x u) c)
+          (/ (vec3-y u) c)
+          (/ (vec3-z u) c))))

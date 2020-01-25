@@ -87,14 +87,19 @@
       (sb-ext:run-program "/usr/bin/open" (list file))))
   )
 
-(defun render-scene (file &key (display t) (width 800) (height 800)
-                            (fill t))
+(defun color (r g b)
+  (list (floor (min (* r 256) 255))
+        (floor (min (* g 256) 255))
+        (floor (min (* b 256) 255))))
+
+(defun render-scene (file &key (display t) (width 800) (height 800))
   (let* ((png (make-instance 'png
                              :width (1+ width)
                              :height (1+ height)))
          (image (data-array png))
          (obj (load-wavefront-object *object-path*)))
-    (let ((*stroke-color* (list 255 255 255)))
+    (let ((*stroke-color* (list 255 255 255))
+          (*light-direction* (vec3 0.0d0 0.0d0 -1.0d0)))
       (flet ((project (u)
                (let ((x (round (* (+ 1d0 (vec3-x u))
                                   width
@@ -105,22 +110,19 @@
                  ;; NOTE: We reflect y coordinates.
                  (vec2 x (- height y)))))
         (loop :for (ia ib ic) :across (wavefront-object-faces obj)
-              :for a := (project
-                         (elt (wavefront-object-vertices obj) ia))
-              :for b := (project
-                         (elt (wavefront-object-vertices obj) ib))
-              :for c := (project
-                         (elt (wavefront-object-vertices obj) ic))
-              :do (cond
-                    (fill
-                     (let ((*stroke-color* (list (random 256)
-                                                 (random 256)
-                                                 (random 256))))
-                       (draw-triangle image a b c)))
-                    (t
-                     (draw-line image a b)
-                     (draw-line image b c)
-                     (draw-line image c a))))))
+              :for a := (elt (wavefront-object-vertices obj) ia)
+              :for b := (elt (wavefront-object-vertices obj) ib)
+              :for c := (elt (wavefront-object-vertices obj) ic)
+              :do (let* ((normal (normalize
+                                  (cross-product (vec3-difference c a)
+                                                 (vec3-difference b a))))
+                         (intensity (dot-product normal *light-direction*)))
+                    (when (> intensity 0)
+                      (let ((*stroke-color* (color intensity intensity intensity)))
+                        (draw-triangle image
+                                       (project a)
+                                       (project b)
+                                       (project c))))))))
     (write-png png file)
     (when display
       (sb-ext:run-program "/usr/bin/open" (list file)))))
