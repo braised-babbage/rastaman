@@ -3,20 +3,36 @@
 (defparameter *stroke-color* (list 255 255 255))
 
 (defun %draw-line-by-x-coords (image x0 y0 x1 y1)
-  (loop :for x :from x0 :upto x1
-        :for s := (/ (- x x0) (- x1 x0))
-        :for y := (round
-                   (+ (* y0 (- 1d0 s))
-                      (* y1 s)))
-        :do (set-pixel-color! image x y *stroke-color*)))
+  (assert (<= x0 x1))
+  (let* ((dx (- x1 x0))
+         (dy (- y1 y0))
+         (derror2 (* 2 (abs dy)))
+         (ystep (if (> y1 y0) 1 -1)))
+    (loop :with y := y0
+          :with error2 := 0
+          :for x :from x0 :upto x1
+          :do (set-pixel-color! image x y *stroke-color*)
+          :do (progn
+                (incf error2 derror2)
+                (when (> error2 dx)
+                  (incf y ystep)
+                  (decf error2 (* 2 dx)))))))
 
 (defun %draw-line-by-y-coords (image x0 y0 x1 y1)
-  (loop :for y :from y0 :upto y1
-        :for s := (/ (- y y0) (- y1 y0))
-        :for x := (round
-                   (+ (* x0 (- 1d0 s))
-                      (* x1 s)))
-        :do (set-pixel-color! image x y *stroke-color*)))
+  (assert (<= y0 y1))
+  (let* ((dy (- y1 y0))
+         (dx (- x1 x0))
+         (derror2 (* 2 (abs dx)))
+         (xstep (if (> x1 x0) 1 -1)))
+    (loop :with x := x0
+          :with error2 := 0
+          :for y :from y0 :upto y1
+          :do (set-pixel-color! image x y *stroke-color*)
+          :do (progn
+                (incf error2 derror2)
+                (when (> error2 dy)
+                  (incf x xstep)
+                  (decf error2 (* 2 dy)))))))
 
 
 (defun draw-line (image u v)
@@ -64,9 +80,7 @@
                (let ((pu (project u width height))
                      (pv (project v width height)))
                  ;; TODO: round to [0,width) x [0,height)
-                 (unless (and (= (vec2-x pu) (vec2-x pv))
-                              (= (vec2-y pu) (vec2-y pv)))
-                   (draw-line image pu pv)))))
+                 (draw-line image pu pv))))
         (loop :for (ia ib ic) :across (wavefront-object-faces obj)
               :for a := (elt (wavefront-object-vertices obj) ia)
               :for b := (elt (wavefront-object-vertices obj) ib)
