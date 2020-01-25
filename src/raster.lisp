@@ -19,15 +19,18 @@
         :do (set-pixel-color! image x y *stroke-color*)))
 
 
-(defun draw-line (image x0 y0 x1 y1)
-  "Draw a line from (X0,Y0) to (X1,Y1) on IMAGE."
-  (if (< (abs (- y0 y1)) (abs (- x0 x1)) )
-      (if (< x0 x1)
-          (%draw-line-by-x-coords image x0 y0 x1 y1)
-          (%draw-line-by-x-coords image x1 y1 x0 y0))
-      (if (< y0 y1)
-          (%draw-line-by-y-coords image x0 y0 x1 y1)
-          (%draw-line-by-y-coords image x1 y1 x0 y0))))
+(defun draw-line (image u v)
+  "Draw a line from point U to V on IMAGE."
+  (let ((x0 (vec2-x u)) (y0 (vec2-y u))
+        (x1 (vec2-x v)) (y1 (vec2-y v)))
+    (if (< (abs (- y0 y1))
+           (abs (- x0 x1)))
+        (if (< x0 x1)
+            (%draw-line-by-x-coords image x0 y0 x1 y1)
+            (%draw-line-by-x-coords image x1 y1 x0 y0))
+        (if (< y0 y1)
+            (%draw-line-by-y-coords image x0 y0 x1 y1)
+            (%draw-line-by-y-coords image x1 y1 x0 y0)))))
 
 
 (defun set-pixel-color! (image col row color)
@@ -40,6 +43,16 @@
 
 (defvar *object-path* #P"/Users/erik/Desktop/african_head.obj")
 
+(defun project (u width height)
+  (let ((x (round (* (+ 1d0 (vec3-x u))
+                     width
+                     0.5)))
+        (y (round (* (+ 1d0 (vec3-y u))
+                     height
+                     0.5))))
+    ;; NOTE: We reflect y coordinates.
+    (vec2 x (- height y))))
+
 (defun render-scene (file &key (display t) (width 800) (height 800))
   (let* ((png (make-instance 'png
                              :width (1+ width)
@@ -48,15 +61,12 @@
          (obj (load-wavefront-object *object-path*)))
     (let ((*stroke-color* (list 255 255 255)))
       (flet ((draw-centered-line (u v)
-               (let ((x0 (round (* (+ (elt u 0) 1d0) width 0.5)))
-                     (y0 (- height      ; Flip vertically
-                            (round (* (+ (elt u 1) 1d0) height 0.5))))
-                     (x1 (round (* (+ (elt v 0) 1d0) width 0.5)))
-                     (y1 (- height
-                            (round (* (+ (elt v 1) 1d0) height 0.5)))))
+               (let ((pu (project u width height))
+                     (pv (project v width height)))
                  ;; TODO: round to [0,width) x [0,height)
-                 (unless (and (= x0 x1) (= y0 y1))
-                   (draw-line image x0 y0 x1 y1)))))
+                 (unless (and (= (vec2-x pu) (vec2-x pv))
+                              (= (vec2-y pu) (vec2-y pv)))
+                   (draw-line image pu pv)))))
         (loop :for (ia ib ic) :across (wavefront-object-faces obj)
               :for a := (elt (wavefront-object-vertices obj) ia)
               :for b := (elt (wavefront-object-vertices obj) ib)

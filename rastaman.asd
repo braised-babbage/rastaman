@@ -5,6 +5,7 @@
   :serial t
   :pathname "src/"
   :components ((:file "package")
+               (:file "geometry")
                (:file "wavefront")
                (:file "raster"))
   :depends-on (:alexandria

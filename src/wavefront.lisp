@@ -31,7 +31,7 @@ Returns a parsed vertex and the next position in the string."
       (multiple-value-bind (z pos)
           (read-from-string line t nil :start pos)
         (check-type z real)
-        (values (list x y z)
+        (values (vec3 x y z)
                 pos)))))
 
 (defun parse-face (line &optional (pos 0))
