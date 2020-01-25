@@ -48,6 +48,23 @@
             (%draw-line-by-y-coords image x0 y0 x1 y1)
             (%draw-line-by-y-coords image x1 y1 x0 y0)))))
 
+;;; TODO: flip y coord
+;;; TODO: clip to screen
+(defun draw-triangle (image a b c)
+  (flet ((draw-point (x y)
+           (multiple-value-bind (q r s)
+               (barycentric-coordinates (vec2 x y) a b c)
+             (unless (or (minusp q) (minusp r) (minusp s))
+               ;; inside triangle, so draw it
+               (set-pixel-color! image x y *stroke-color*)))))
+    (let ((min-x (min (vec2-x a) (vec2-x b) (vec2-x c)))
+          (max-x (max (vec2-x a) (vec2-x b) (vec2-x c)))
+          (min-y (min (vec2-y a) (vec2-y b) (vec2-y c)))
+          (max-y (max (vec2-y a) (vec2-y b) (vec2-y c))))
+      (loop :for x :from min-x :upto max-x
+            :do (loop :for y :from min-y :upto max-y
+                      :do (draw-point x y))))))
+
 
 (defun set-pixel-color! (image col row color)
   (setf (aref image row col 0) (elt color 0))
@@ -59,36 +76,51 @@
 
 (defvar *object-path* #P"/Users/erik/Desktop/african_head.obj")
 
-(defun project (u width height)
-  (let ((x (round (* (+ 1d0 (vec3-x u))
-                     width
-                     0.5)))
-        (y (round (* (+ 1d0 (vec3-y u))
-                     height
-                     0.5))))
-    ;; NOTE: We reflect y coordinates.
-    (vec2 x (- height y))))
+(defun triangle-demo (file &key (display t) (width 200) (height 200))
+  (let* ((png (make-instance 'png
+                             :width width
+                             :height height))
+         (image (data-array png)))
+    (draw-triangle image (vec2 10 10) (vec2 100 30) (vec2 190 160))
+    (write-png png file)
+    (when display
+      (sb-ext:run-program "/usr/bin/open" (list file))))
+  )
 
-(defun render-scene (file &key (display t) (width 800) (height 800))
+(defun render-scene (file &key (display t) (width 800) (height 800)
+                            (fill t))
   (let* ((png (make-instance 'png
                              :width (1+ width)
                              :height (1+ height)))
          (image (data-array png))
          (obj (load-wavefront-object *object-path*)))
     (let ((*stroke-color* (list 255 255 255)))
-      (flet ((draw-centered-line (u v)
-               (let ((pu (project u width height))
-                     (pv (project v width height)))
-                 ;; TODO: round to [0,width) x [0,height)
-                 (draw-line image pu pv))))
+      (flet ((project (u)
+               (let ((x (round (* (+ 1d0 (vec3-x u))
+                                  width
+                                  0.5)))
+                     (y (round (* (+ 1d0 (vec3-y u))
+                                  height
+                                  0.5))))
+                 ;; NOTE: We reflect y coordinates.
+                 (vec2 x (- height y)))))
         (loop :for (ia ib ic) :across (wavefront-object-faces obj)
-              :for a := (elt (wavefront-object-vertices obj) ia)
-              :for b := (elt (wavefront-object-vertices obj) ib)
-              :for c := (elt (wavefront-object-vertices obj) ic)
-              :do (progn
-                    (draw-centered-line a b)
-                    (draw-centered-line b c)
-                    (draw-centered-line c a)))))
+              :for a := (project
+                         (elt (wavefront-object-vertices obj) ia))
+              :for b := (project
+                         (elt (wavefront-object-vertices obj) ib))
+              :for c := (project
+                         (elt (wavefront-object-vertices obj) ic))
+              :do (cond
+                    (fill
+                     (let ((*stroke-color* (list (random 256)
+                                                 (random 256)
+                                                 (random 256))))
+                       (draw-triangle image a b c)))
+                    (t
+                     (draw-line image a b)
+                     (draw-line image b c)
+                     (draw-line image c a))))))
     (write-png png file)
     (when display
       (sb-ext:run-program "/usr/bin/open" (list file)))))
