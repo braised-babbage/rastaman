@@ -50,20 +50,33 @@
 
 ;;; TODO: flip y coord
 ;;; TODO: clip to screen
+
+(defvar *z-buffer*)
+(defvar *world->screen*)
+
 (defun draw-triangle (image a b c)
-  (flet ((draw-point (x y)
-           (multiple-value-bind (q r s)
-               (barycentric-coordinates (vec2 x y) a b c)
-             (unless (or (minusp q) (minusp r) (minusp s))
-               ;; inside triangle, so draw it
-               (set-pixel-color! image x y *stroke-color*)))))
-    (let ((min-x (min (vec2-x a) (vec2-x b) (vec2-x c)))
-          (max-x (max (vec2-x a) (vec2-x b) (vec2-x c)))
-          (min-y (min (vec2-y a) (vec2-y b) (vec2-y c)))
-          (max-y (max (vec2-y a) (vec2-y b) (vec2-y c))))
-      (loop :for x :from min-x :upto max-x
-            :do (loop :for y :from min-y :upto max-y
-                      :do (draw-point x y))))))
+  ;; Note: now a,b,c are vec3f
+  (let ((pa (funcall *world->screen* a))
+        (pb (funcall *world->screen* b))
+        (pc (funcall *world->screen* c)))
+    (flet ((draw-point (x y)
+             (multiple-value-bind (q r s)
+                 (barycentric-coordinates (vec2 x y) pa pb pc)
+               (unless (or (minusp q) (minusp r) (minusp s))
+                 ;; inside triangle, so draw it
+                 (let ((z (+ (* q (vec3-z a))
+                             (* r (vec3-z b))
+                             (* s (vec3-z c)))))
+                   (when (> z (aref *z-buffer* x y))
+                     (setf (aref *z-buffer* x y) z)
+                     (set-pixel-color! image x y *stroke-color*)))))))
+      (let ((min-x (min (vec2-x pa) (vec2-x pb) (vec2-x pc)))
+            (max-x (max (vec2-x pa) (vec2-x pb) (vec2-x pc)))
+            (min-y (min (vec2-y pa) (vec2-y pb) (vec2-y pc)))
+            (max-y (max (vec2-y pa) (vec2-y pb) (vec2-y pc))))
+        (loop :for x :from min-x :upto max-x
+              :do (loop :for y :from min-y :upto max-y
+                        :do (draw-point x y)))))))
 
 
 (defun set-pixel-color! (image col row color)
@@ -76,17 +89,6 @@
 
 (defvar *object-path* #P"/Users/erik/Desktop/african_head.obj")
 
-(defun triangle-demo (file &key (display t) (width 200) (height 200))
-  (let* ((png (make-instance 'png
-                             :width width
-                             :height height))
-         (image (data-array png)))
-    (draw-triangle image (vec2 10 10) (vec2 100 30) (vec2 190 160))
-    (write-png png file)
-    (when display
-      (sb-ext:run-program "/usr/bin/open" (list file))))
-  )
-
 (defun color (r g b)
   (list (floor (min (* r 256) 255))
         (floor (min (* g 256) 255))
@@ -98,17 +100,21 @@
                              :height (1+ height)))
          (image (data-array png))
          (obj (load-wavefront-object *object-path*)))
-    (let ((*stroke-color* (list 255 255 255))
-          (*light-direction* (vec3 0.0d0 0.0d0 -1.0d0)))
-      (flet ((project (u)
-               (let ((x (round (* (+ 1d0 (vec3-x u))
-                                  width
-                                  0.5)))
-                     (y (round (* (+ 1d0 (vec3-y u))
-                                  height
-                                  0.5))))
-                 ;; NOTE: We reflect y coordinates.
-                 (vec2 x (- height y)))))
+    (flet ((project (u)
+             (let ((x (round (* (+ 1d0 (vec3-x u))
+                                width
+                                0.5)))
+                   (y (round (* (+ 1d0 (vec3-y u))
+                                height
+                                0.5))))
+               ;; NOTE: We reflect y coordinates.
+               (vec2 x (- height y)))))
+      (let ((*stroke-color* (list 255 255 255))
+            (*light-direction* (vec3 0.0d0 0.0d0 -1.0d0))
+            (*z-buffer* (make-array (list (1+ width) (1+ height))
+                                    :element-type 'double-float
+                                    :initial-element most-negative-double-float))
+            (*world->screen* #'project))
         (loop :for (ia ib ic) :across (wavefront-object-faces obj)
               :for a := (elt (wavefront-object-vertices obj) ia)
               :for b := (elt (wavefront-object-vertices obj) ib)
@@ -119,10 +125,7 @@
                          (intensity (dot-product normal *light-direction*)))
                     (when (> intensity 0)
                       (let ((*stroke-color* (color intensity intensity intensity)))
-                        (draw-triangle image
-                                       (project a)
-                                       (project b)
-                                       (project c))))))))
+                        (draw-triangle image a b c)))))))
     (write-png png file)
     (when display
       (sb-ext:run-program "/usr/bin/open" (list file)))))
