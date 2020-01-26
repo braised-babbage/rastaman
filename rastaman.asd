@@ -9,4 +9,6 @@
                (:file "wavefront")
                (:file "raster"))
   :depends-on (:alexandria
-               :zpng))
+               :zpng
+               :3d-vectors
+               :3d-matrices))

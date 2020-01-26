@@ -1,4 +1,7 @@
 (defpackage rastaman
-  (:use :cl
+  (:use
+   :cl
    :alexandria
-        :zpng))
+   :3d-vectors
+   :3d-matrices
+   :zpng))
