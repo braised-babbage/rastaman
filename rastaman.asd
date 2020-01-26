@@ -7,8 +7,11 @@
   :components ((:file "package")
                (:file "geometry")
                (:file "wavefront")
-               (:file "raster"))
+               (:file "graphics")
+               (:file "shader")
+               (:file "demo"))
   :depends-on (:alexandria
+               :abstract-classes
                :zpng
                :3d-vectors
                :3d-matrices))

@@ -92,3 +92,13 @@ Returns a parsed face and the next position in the string."
      :vertices (map 'vector #'identity (nreverse vertices))
      :normals (map 'vector #'identity (nreverse normals))
      :faces (map 'vector #'identity (nreverse faces)))))
+
+
+;;;
+
+(defun vertex-and-normal (obj iface idx)
+  (let* ((face (elt (wavefront-object-faces obj) iface))
+         (ivertex (elt face idx)))
+    (values
+     (elt (wavefront-object-vertices obj) ivertex)
+     (elt (wavefront-object-normals obj) ivertex))))
