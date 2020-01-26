@@ -1,13 +1,7 @@
 (in-package :rastaman)
 
-;;; TODO: flip y coord
-;;; TODO: clip to screen
-
-(defvar *image-buffer)
 (defvar *z-buffer*)
-(defvar *world->screen*)
 (defvar *draw-color*)
-
 (defvar *viewport-matrix*)
 (defvar *projection-matrix*)
 (defvar *modelview-matrix*)
@@ -94,13 +88,22 @@
                           (sc (v4->v3 (m* transform c))))
                       (draw-triangle image sa sb sc))))))))
 
+
+(defun render-depthmap (image)
+  (destructuring-bind (rows columns channels) (array-dimensions image)
+    (when (> channels 1)
+      (warn "Rendering depth to an image with ~A channels, although only 1 was expected." channels))
+    (dotimes (i rows)
+      (dotimes (j columns)
+        (setf (aref image i j 0)
+              (- 255 (aref *z-buffer* j (- rows i 1))))))) )
+
 (defun render-scene (file &key (display t) (width 800) (height 800)
                             (render-depth nil))
   (let* ((png (make-instance 'png
                              :width width
                              :height height))
-         (image (data-array png))
-         (depth-png (make-instance 'png
+         (depthmap (make-instance 'png
                                    :width width
                                    :height height
                                    :color-type :grayscale))
@@ -113,14 +116,14 @@
                                   :element-type '(unsigned-byte 8)
                                   :initial-element 255)))
       (time
-       (render-model obj image))
+       (render-model obj (data-array png)))
 
       (when render-depth
-        (dotimes (i height)
-          (dotimes (j width)
-            (setf (aref (data-array depth-png) (- height (1+ i)) j 0)
-                  (- 255 (aref *z-buffer* j i)))))))
+        (render-depthmap (data-array depthmap))
+        (write-png depthmap render-depth)))
 
-    (write-png (if render-depth depth-png png) file)
+    (write-png png file)
     (when display
-      (sb-ext:run-program "/usr/bin/open" (list file)))))
+      (sb-ext:run-program "/usr/bin/open" (list file))
+      (when render-depth
+        (sb-ext:run-program "/usr/bin/open" (list render-depth))))))
