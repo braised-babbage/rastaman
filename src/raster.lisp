@@ -22,23 +22,26 @@
                (barycentric-coordinates (vec3 x y 1.0) a b c)
              (unless (or (minusp q) (minusp r) (minusp s))
                ;; inside triangle, so draw it
-               (let ((z (+ (* q (vz3 a))
-                           (* r (vz3 b))
-                           (* s (vz3 c)))))
-                 (when (> z (aref *z-buffer* x y))
-                   (setf (aref *z-buffer* x y) z)
+               (let* ((z (+ (* q (vz3 a))
+                            (* r (vz3 b))
+                            (* s (vz3 c))))
+                      (frag-depth (max 0 (min 255 (round z)))))
+                 (when (< frag-depth (aref *z-buffer* x y))
+                   (setf (aref *z-buffer* x y) frag-depth)
                    (set-pixel-color! image x y *draw-color*)))))))
-    (let ((min-x (truncate (min (vx3 a) (vx3 b) (vx3 c))))
-          (max-x (truncate (max (vx3 a) (vx3 b) (vx3 c))))
-          (min-y (truncate (min (vy3 a) (vy3 b) (vy3 c))))
-          (max-y (truncate (max (vy3 a) (vy3 b) (vy3 c)))))
+    (let ((min-x (max 0 (truncate (min (vx3 a) (vx3 b) (vx3 c)))))
+          (max-x (min (1- (array-dimension image 1))
+                      (truncate (max (vx3 a) (vx3 b) (vx3 c)))))
+          (min-y (max 0 (truncate (min (vy3 a) (vy3 b) (vy3 c)))))
+          (max-y (min (1- (array-dimension image 0))
+                      (truncate (max (vy3 a) (vy3 b) (vy3 c))))))
       (loop :for x :from min-x :upto max-x
             :do (loop :for y :from min-y :upto max-y
                       :do (draw-point x y))))))
 
 
 (defun set-pixel-color! (image x y color)
-  (let ((row (- (array-dimension image 0) y))
+  (let ((row (- (array-dimension image 0) (1+ y)))
         (col x))
     (setf (aref image row col 0) (elt color 0))
     (setf (aref image row col 1) (elt color 1))
@@ -54,12 +57,6 @@
         (floor (min (* g 256) 255))
         (floor (min (* b 256) 255))))
 
-(defun z-projection (z)
-  (mat  1 0      0   0
-        0 1      0   0
-        0 0      1   0
-        0 0 (/ -1 z) 1))
-
 (alexandria:define-constant +depth+ 255)
 
 (defun viewport (x y width height)
@@ -74,36 +71,56 @@
           (/ y w)
           (/ z w))))
 
-(defun render-scene (file &key (display t) (width 800) (height 800))
+(defparameter *eye*       (vec 0 0 3 1))
+(defparameter *center*    (vec 0 0 0 1))
+(defparameter *light-dir* (unit-vector (vec -1 -1 -1 0)))
+(defparameter *up*        (vec 0 1 0 0))
+
+(defun render-model (obj image)
+  (let ((transform (m* *viewport-matrix* *projection-matrix* *modelview-matrix*)))
+    (loop :for (ia ib ic) :across (wavefront-object-faces obj)
+          :for a := (elt (wavefront-object-vertices obj) ia)
+          :for b := (elt (wavefront-object-vertices obj) ib)
+          :for c := (elt (wavefront-object-vertices obj) ic)
+          :do (let* ((normal (unit-vector
+                              (cross-product (v- c a)
+                                             (v- b a))))
+                     (intensity (dot-product normal *light-dir*)))
+                (when (> intensity 0)
+                  (let ((*draw-color* (color intensity intensity intensity)))
+                    ;; get screen coordinates
+                    (let ((sa (v4->v3 (m* transform a)))
+                          (sb (v4->v3 (m* transform b)))
+                          (sc (v4->v3 (m* transform c))))
+                      (draw-triangle image sa sb sc))))))))
+
+(defun render-scene (file &key (display t) (width 800) (height 800)
+                            (render-depth nil))
   (let* ((png (make-instance 'png
-                             :width (1+ width)
-                             :height (1+ height)))
+                             :width width
+                             :height height))
          (image (data-array png))
-         (light-direction (vec3 0 0 -1))
+         (depth-png (make-instance 'png
+                                   :width width
+                                   :height height
+                                   :color-type :grayscale))
          (obj (load-wavefront-object *object-path*)))
-    (let ((*projection-matrix* (z-projection 3))
+    (let ((*modelview-matrix* (mlookat *eye* *center* *up*))
+          (*projection-matrix* (mfrustum -0.5 0.5 -0.5 0.5 1 10))
           (*viewport-matrix* (viewport (* width 1/8) (* height 1/8)
                                        (* width 3/4) (* height 3/4)))
-          (*z-buffer* (make-array (list (1+ width) (1+ height))
-                                  :element-type 'single-float
-                                  :initial-element most-negative-single-float)))
-      (let ((transform (m* *viewport-matrix* *projection-matrix*)))
-        (loop :for (ia ib ic) :across (wavefront-object-faces obj)
-              :for a := (elt (wavefront-object-vertices obj) ia)
-              :for b := (elt (wavefront-object-vertices obj) ib)
-              :for c := (elt (wavefront-object-vertices obj) ic)
-              :do (let* ((normal (unit-vector
-                                  (cross-product (v- c a)
-                                                 (v- b a))))
-                         (intensity (dot-product normal light-direction)))
-                    (when (> intensity 0)
-                      (let ((*draw-color* (color intensity intensity intensity)))
-                        ;; get screen coordinates
-                        (let ((sa (v4->v3 (m* transform a)))
-                              (sb (v4->v3 (m* transform b)))
-                              (sc (v4->v3 (m* transform c))))
-                          (draw-triangle image sa sb sc))))))))
+          (*z-buffer* (make-array (list width height)
+                                  :element-type '(unsigned-byte 8)
+                                  :initial-element 255)))
+      (time
+       (render-model obj image))
 
-    (write-png png file)
+      (when render-depth
+        (dotimes (i height)
+          (dotimes (j width)
+            (setf (aref (data-array depth-png) (- height (1+ i)) j 0)
+                  (- 255 (aref *z-buffer* j i)))))))
+
+    (write-png (if render-depth depth-png png) file)
     (when display
       (sb-ext:run-program "/usr/bin/open" (list file)))))

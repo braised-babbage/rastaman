@@ -37,7 +37,9 @@
   (v. u v))
 
 (defun cross-product (u v)
-  (vc u v))
+  (assert (zerop (vw u)))
+  (assert (zerop (vw v)))
+  (vxyz_ (vc (vxyz u) (vxyz v))))
 
 (defun unit-vector (u)
   (vunit u))
