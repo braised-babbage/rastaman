@@ -8,7 +8,21 @@
 
 (defstruct wavefront-object
   vertices
-  faces)
+  faces
+  normals)
+
+(defun %parse-actual-vertex (line pos w)
+  (multiple-value-bind (x pos)
+      (read-from-string line t nil :start pos)
+    (check-type x real)
+    (multiple-value-bind (y pos)
+        (read-from-string line t nil :start pos)
+      (check-type y real)
+      (multiple-value-bind (z pos)
+          (read-from-string line t nil :start pos)
+        (check-type z real)
+        (values (vec x y z w)
+                pos)))))
 
 (defun parse-vertex (line &optional (pos 0))
   "Parse a vertex froma LINE, starting at position POS.
@@ -22,17 +36,12 @@ where the three numbers represent the x,y,z coordinates of the vertex.
 Returns a parsed vertex and the next position in the string."
   (unless (char= #\v (elt line pos))
     (error "Expected a 'v' at start of vertex definition line, but got ~A instead" (elt line pos)))
-  (multiple-value-bind (x pos)
-      (read-from-string line t nil :start (1+ pos))
-    (check-type x real)
-    (multiple-value-bind (y pos)
-        (read-from-string line t nil :start pos)
-      (check-type y real)
-      (multiple-value-bind (z pos)
-          (read-from-string line t nil :start pos)
-        (check-type z real)
-        (values (vec x y z 1.0)
-                pos)))))
+  (%parse-actual-vertex line (1+ pos) 1.0))
+
+(defun parse-normal (line &optional (pos 0))
+  (unless (string= "vn" (subseq line pos (+ 2 pos)))
+    (error "Expected a 'vn' at start of vertex definition line, but got ~A instead" (elt line pos)))
+  (%parse-actual-vertex line (+ 2 pos) 0.0))
 
 (defun parse-face (line &optional (pos 0))
   "Parse a face froma LINE, starting at position POS.
@@ -64,17 +73,22 @@ Returns a parsed face and the next position in the string."
             (parse-index pos)
           (values (list ia ib ic) pos))))))
 
+
 (defun load-wavefront-object (path)
   "Load a Wavefront OBJ file from the specified PATH."
   (let ((vertices nil)
-        (faces nil))
+        (faces nil)
+        (normals nil))
     (with-open-file (stream path)
       (loop :for line := (read-line stream nil)
             :while line
-            :do (when (and (< 1 (length line))
-                           (char= #\Space (elt line 1)))
-                  (case (elt line 0)
-                    (#\v (push (parse-vertex line) vertices))
-                    (#\f (push (parse-face line) faces))))))
-    (make-wavefront-object :vertices (map 'vector #'identity (nreverse vertices))
-                           :faces (map 'vector #'identity (nreverse faces)))))
+            :do (cond ((starts-with-subseq "v " line)
+                       (push (parse-vertex line) vertices))
+                      ((starts-with-subseq "vn " line)
+                       (push (parse-normal line) normals))
+                      ((starts-with-subseq "f " line)
+                       (push (parse-face line) faces)))))
+    (make-wavefront-object
+     :vertices (map 'vector #'identity (nreverse vertices))
+     :normals (map 'vector #'identity (nreverse normals))
+     :faces (map 'vector #'identity (nreverse faces)))))

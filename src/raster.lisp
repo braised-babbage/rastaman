@@ -6,7 +6,7 @@
 (defvar *projection-matrix*)
 (defvar *modelview-matrix*)
 
-(defun draw-triangle (image a b c)
+(defun draw-triangle (image a b c la lb lc)
   ;; Note: now a,b,c are vec3f
   (check-type a vec3)
   (check-type b vec3)
@@ -19,10 +19,15 @@
                (let* ((z (+ (* q (vz3 a))
                             (* r (vz3 b))
                             (* s (vz3 c))))
-                      (frag-depth (max 0 (min 255 (round z)))))
-                 (when (< frag-depth (aref *z-buffer* x y))
+                      (frag-depth (max 0 (min 255 (round z))))
+                      (intensity (max 0 (min 1
+                                             (+ (* q la)
+                                                (* r lb)
+                                                (* s lc))))))
+                 (when (and (< frag-depth (aref *z-buffer* x y)))
                    (setf (aref *z-buffer* x y) frag-depth)
-                   (set-pixel-color! image x y *draw-color*)))))))
+                   (set-pixel-color! image x y
+                                     (color intensity intensity intensity))))))))
     (let ((min-x (max 0 (truncate (min (vx3 a) (vx3 b) (vx3 c)))))
           (max-x (min (1- (array-dimension image 1))
                       (truncate (max (vx3 a) (vx3 b) (vx3 c)))))
@@ -67,7 +72,7 @@
 
 (defparameter *eye*       (vec 0 0 3 1))
 (defparameter *center*    (vec 0 0 0 1))
-(defparameter *light-dir* (unit-vector (vec -1 -1 -1 0)))
+(defparameter *light-dir* (unit-vector (vec 1 1 1 0)))
 (defparameter *up*        (vec 0 1 0 0))
 
 (defun render-model (obj image)
@@ -76,17 +81,16 @@
           :for a := (elt (wavefront-object-vertices obj) ia)
           :for b := (elt (wavefront-object-vertices obj) ib)
           :for c := (elt (wavefront-object-vertices obj) ic)
-          :do (let* ((normal (unit-vector
-                              (cross-product (v- c a)
-                                             (v- b a))))
-                     (intensity (dot-product normal *light-dir*)))
-                (when (> intensity 0)
-                  (let ((*draw-color* (color intensity intensity intensity)))
-                    ;; get screen coordinates
-                    (let ((sa (v4->v3 (m* transform a)))
-                          (sb (v4->v3 (m* transform b)))
-                          (sc (v4->v3 (m* transform c))))
-                      (draw-triangle image sa sb sc))))))))
+          :for la := (dot-product *light-dir*
+                                  (elt (wavefront-object-normals obj) ia))
+          :for lb := (dot-product *light-dir*
+                                  (elt (wavefront-object-normals obj) ib))
+          :for lc := (dot-product *light-dir*
+                                  (elt (wavefront-object-normals obj) ic))
+          :do (let ((sa (v4->v3 (m* transform a)))
+                    (sb (v4->v3 (m* transform b)))
+                    (sc (v4->v3 (m* transform c))))
+                (draw-triangle image sa sb sc la lb lc)))))
 
 
 (defun render-depthmap (image)
