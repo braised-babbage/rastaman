@@ -11,7 +11,6 @@
                (:file "shader")
                (:file "demo"))
   :depends-on (:alexandria
-               :abstract-classes
                :targa
                :zpng
                :3d-vectors

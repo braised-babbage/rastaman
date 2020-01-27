@@ -1,5 +1,10 @@
 (in-package :rastaman)
 
+(defvar *model-path* (asdf:system-relative-pathname "rastaman"
+                                                    "data/african_head.obj"))
+(defvar *texture-path* (asdf:system-relative-pathname "rastaman"
+                                                      "data/african_head_diffuse.tga"))
+
 (defparameter *eye*       (vec 0 0 3 1))
 (defparameter *center*    (vec 0 0 0 1))
 (defparameter *light-dir* (unit-vector (vec 1 1 1 0)))
@@ -13,7 +18,6 @@
             (b (funcall (shader-vertex-program shader) i 1))
             (c (funcall (shader-vertex-program shader) i 2)))
         (draw-triangle image shader a b c)))))
-
 
 (defun render-depthmap (image)
   (destructuring-bind (rows columns channels) (array-dimensions image)
@@ -49,8 +53,8 @@
                                    :width width
                                    :height height
                                    :color-type :grayscale))
-         (obj (load-wavefront-object #P"/Users/erik/Desktop/african_head.obj"))
-         (texture (targa:tga-load #P "/Users/erik/Desktop/african_head_diffuse.tga")))
+         (obj (load-wavefront-object *model-path*))
+         (texture (targa:tga-load *texture-path*)))
     (let ((*modelview-matrix* (mlookat *eye* *center* *up*))
           (*projection-matrix* (mfrustum -0.5 0.5 -0.5 0.5 1.5 10))
           (*viewport-matrix* (viewport (* width 1/8) (* height 1/8)
