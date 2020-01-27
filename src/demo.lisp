@@ -1,14 +1,14 @@
 (in-package :rastaman)
 
-(defvar *model-path* (asdf:system-relative-pathname "rastaman"
-                                                    "data/african_head.obj"))
-(defvar *texture-path* (asdf:system-relative-pathname "rastaman"
-                                                      "data/african_head_diffuse.tga"))
-
-(defparameter *eye*       (vec 0 0 3 1))
+(defparameter *eye*       (vec 1 1 3 1))
 (defparameter *center*    (vec 0 0 0 1))
-(defparameter *light-dir* (unit-vector (vec 1 1 1 0)))
+(defparameter *light-dir* (unit-vector (vec 0.5 0.5 1 0)))
 (defparameter *up*        (vec 0 1 0 0))
+
+(defparameter *model-path*
+  (asdf:system-relative-pathname "rastaman" "data/african_head.obj"))
+(defparameter *texture-path*
+  (asdf:system-relative-pathname "rastaman" "data/african_head_diffuse.tga"))
 
 (defun render-model (obj texture image)
   (let ((shader (make-textured-gouraud-shader obj texture)))
@@ -44,8 +44,7 @@
     (write-png png file)
     (sb-ext:run-program "/usr/bin/open" (list file))))
 
-(defun render-scene (file &key (display t) (width 800) (height 800)
-                            (render-depth nil))
+(defun render-scene (file &key (display t) (width 800) (height 800) (render-depth nil))
   (let* ((png (make-instance 'png
                              :width width
                              :height height))
@@ -58,7 +57,8 @@
     (let ((*modelview-matrix* (mlookat *eye* *center* *up*))
           (*projection-matrix* (mfrustum -0.5 0.5 -0.5 0.5 1.5 10))
           (*viewport-matrix* (viewport (* width 1/8) (* height 1/8)
-                                       (* width 3/4) (* height 3/4)))
+                                       (* width 3/4) (* height 3/4)
+                                       +z-buffer-depth+))
           (*z-buffer* (make-array (list width height)
                                   :element-type '(unsigned-byte 8)
                                   :initial-element 255)))

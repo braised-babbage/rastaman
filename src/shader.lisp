@@ -1,5 +1,19 @@
 (in-package :rastaman)
 
+;;; Shaders
+;;;
+;;; A shader consists of three "programs":
+;;;   1. INIT-PROGRAM, used to set up whatever states is needed.
+;;;   2. VERTEX-PROGRAM, which (at a minimum) is responsible for transforming
+;;;      the vertices of a triangle from world coordinates to screen coordinates.
+;;;   3. FRAGMENT-PROGRAM, which is responsible for assigning a color to a
+;;;      point expressed in barycentric coordinates.
+;;;
+;;; These three programs may operate on some shared state, which is assumed to exist
+;;; on a per-triangle basis. Single threaded code may get by with a single shader
+;;; shared across triangles (via INIT-PROGRAM), but conceptually one may consider
+;;; each triangle to have its own independent shader program. 
+
 (defstruct shader
   init-program
   vertex-program
@@ -69,7 +83,7 @@
                        (max 0.0 (dot-product n *light-dir*)))
                  (setf (aref varying-tex-u idx) (vx2 tex))
                  (setf (aref varying-tex-v idx) (vy2 tex))
-                 (v4->v3 (m* transform v))))
+                 (dehomogenize (m* transform v))))
 
              (fragment-program (q r s)
                (let ((intensity (mix varying-intensity q r s))

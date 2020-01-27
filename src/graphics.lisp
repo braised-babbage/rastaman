@@ -1,22 +1,28 @@
 (in-package :rastaman)
 
 (defvar *z-buffer*)
-(defvar *viewport-matrix*)
-(defvar *projection-matrix*)
+(setf (documentation '*z-buffer* 'variable)
+      "The active buffer of depth values, used for rasterization.")
+
+(alexandria:define-constant +z-buffer-depth+ 255
+  :documentation "The depth of the Z buffer.")
+
 (defvar *modelview-matrix*)
+(setf (documentation '*modelview-matrix* 'variable)
+      "The active model-view matrix, mapping object coordinates to camera (\"eye\") coordinates.")
+
+(defvar *projection-matrix*)
+(setf (documentation '*projection-matrix* 'variable)
+      "The active projection matrix, mapping camera coordinates to clip coordinates.")
+
+(defvar *viewport-matrix*)
+(setf (documentation '*viewport-matrix* 'variable)
+      "The active projection matrix, mapping clip coordinates to screen coordinates.")
+
 
 (defun float-to-unsigned-byte (f)
+  "Convert a floating point number in [0,1] to a corresponding unsigned byte."
   (max 0 (min 255 (round (* f 256)))))
-
-(defun triangle-bounding-box (image a b c)
-  (let ((min-x (max 0 (truncate (min (vx3 a) (vx3 b) (vx3 c)))))
-        (max-x (min (1- (image-width image))
-                    (truncate (max (vx3 a) (vx3 b) (vx3 c)))))
-        (min-y (max 0 (truncate (min (vy3 a) (vy3 b) (vy3 c)))))
-        (max-y (min (1- (image-height image))
-                    (truncate (max (vy3 a) (vy3 b) (vy3 c))))))
-    (values min-x min-y max-x max-y)))
-
 
 (defun image-width (image)
   (array-dimension image 1))
@@ -25,7 +31,7 @@
   (array-dimension image 0))
 
 (defun draw-triangle (image shader a b c)
-  ;; Note: now a,b,c are vec3f
+  "Draw a triangle ABC to the provided IMAGE, according to SHADER."
   (check-type a vec3)
   (check-type b vec3)
   (check-type c vec3)
@@ -37,20 +43,21 @@
                (let* ((z (+ (* q (vz3 a))
                             (* r (vz3 b))
                             (* s (vz3 c))))
-                      (frag-depth (max 0 (min 255 (round z)))))
+                      (frag-depth (max 0 (min +z-buffer-depth+ (round z)))))
                  (when (and (< frag-depth (aref *z-buffer* x y)))
                    (setf (aref *z-buffer* x y) frag-depth)
                    (multiple-value-bind (r g b)
                        (funcall (shader-fragment-program shader) q r s)
-                     (set-pixel-color! image x y r g b))))))))
+                     (%set-pixel-color! image x y r g b))))))))
 
     (multiple-value-bind (min-x min-y max-x max-y)
-        (triangle-bounding-box image a b c)
+        (clipped-bounding-box a b c
+                              (image-width image) (image-height image))
       (loop :for x :from min-x :upto max-x
             :do (loop :for y :from min-y :upto max-y
                       :do (draw-point x y))))))
 
-(defun set-pixel-color! (image x y r g b)
+(defun %set-pixel-color! (image x y r g b)
   (let ((row (- (array-dimension image 0) (1+ y)))
         (col x))
     (setf (aref image row col 0) (float-to-unsigned-byte r))
